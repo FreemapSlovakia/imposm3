@@ -58,7 +58,7 @@ func (t *validatedGeometryType) GeneralizeSQL(colSpec *ColumnSpec, spec *General
 		// TODO return warning earlier
 		log.Printf("[warn] validated_geometry column returns polygon geometries for %s", spec.FullName)
 	}
-	return fmt.Sprintf(`ST_Buffer(ST_SimplifyPreserveTopology("%s", %f), 0)::Geometry as "%s"`,
+	return fmt.Sprintf(`ST_MakeValid(ST_SimplifyPreserveTopology("%s", %f), 'method=structure')::Geometry as "%s"`,
 		colSpec.Name, spec.Tolerance, colSpec.Name,
 	)
 }
