@@ -96,10 +96,10 @@ func (kv *KeyValues) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return fmt.Errorf("mapping key '%s' not a string", k)
 		}
 		for _, v := range values {
-			if v, ok := v.(string); ok {
-				(*kv)[Key(k)] = append((*kv)[Key(k)], OrderedValue{Value: Value(v), Order: order})
+			if s, ok := v.(string); ok {
+				(*kv)[Key(k)] = append((*kv)[Key(k)], OrderedValue{Value: Value(s), Order: order})
 			} else {
-				return fmt.Errorf("mapping value '%s' not a string", v)
+				return fmt.Errorf("mapping value '%v' for mapping key '%s' not a string", v, k)
 			}
 			order++
 		}
