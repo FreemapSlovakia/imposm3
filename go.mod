@@ -5,7 +5,7 @@ go 1.21.0
 require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/jmhodges/levigo v1.0.1-0.20191214093932-ed89ec741d96
-	github.com/lib/pq v1.8.0
+	github.com/lib/pq v1.10.9
 	github.com/omniscale/go-osm v0.3.1
 	github.com/pkg/errors v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
