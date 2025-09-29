@@ -5,9 +5,6 @@ Imposm is an importer for OpenStreetMap data. It reads PBF files and imports the
 
 It is designed to create databases that are optimized for rendering (i.e. generating tiles or for WMS services).
 
-Imposm >=3 is written in Go and it is a complete rewrite of the previous Python implementation.
-Configurations/mappings and cache files are not compatible with Imposm 2, but they share a similar architecture.
-
 The development of Imposm is sponsored by [Omniscale](https://omniscale.com/).
 
 *Imposm is in production use by the authors. It is actively maintained, with a focus on resolving future incompatibilities with dependencies such as PostGIS. However, there is no capacity for end-user support, and no new features will be developed beyond its existing scope.*
@@ -89,7 +86,7 @@ There are some dependencies:
 
 #### Compiler
 
-You need [Go](http://golang.org). 1.17 or higher is recommended.
+You need [Go](http://golang.org). 1.21 or higher is recommended.
 
 #### C/C++ libraries
 
@@ -164,7 +161,7 @@ For more options see:
     imposm import -help
 
 
-Note: TLS/SSL support is disabled by default due to the lack of renegotiation support in Go's TLS implementation. You can re-enable encryption by setting the `PGSSLMODE` environment variable or the `sslmode` connection option to `require` or `verify-full`, eg: `-connect postgis://host/dbname?sslmode=require`. You will need to disable renegotiation support on your server to prevent connection errors on larger imports. You can do this by setting `ssl_renegotiation_limit` to 0 in your PostgreSQL server configuration.
+Note: TLS/SSL support is disabled by default. You can re-enable encryption by setting the `PGSSLMODE` environment variable or the `sslmode` connection option to `require` or `verify-full`, eg: `-connect postgis://host/dbname?sslmode=require`.
 
 
 Documentation
@@ -176,8 +173,6 @@ Support
 -------
 
 There is a [mailing list at Google Groups](http://groups.google.com/group/imposm) for all questions. You can subscribe by sending an email to: `imposm+subscribe@googlegroups.com`
-
-For commercial support [contact Omniscale](http://omniscale.com/contact).
 
 Development
 -----------
