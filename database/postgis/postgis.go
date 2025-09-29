@@ -86,29 +86,6 @@ func addGeometryColumn(tx *sql.Tx, tableName string, spec TableSpec) error {
 	return nil
 }
 
-func getPostgisVersion(tx *sql.Tx) (string, error) {
-	sql := fmt.Sprintf("SELECT PostGIS_lib_version();")
-	row := tx.QueryRow(sql)
-	var version string
-	err := row.Scan(&version)
-	if err != nil {
-		return "", &SQLError{sql, err}
-	}
-	return version, nil
-}
-
-func populateGeometryColumn(tx *sql.Tx, tableName string, spec TableSpec) error {
-	sql := fmt.Sprintf("SELECT Populate_Geometry_Columns('%s.%s'::regclass);",
-		spec.Schema, tableName)
-	row := tx.QueryRow(sql)
-	var void interface{}
-	err := row.Scan(&void)
-	if err != nil {
-		return &SQLError{sql, err}
-	}
-	return nil
-}
-
 func (pg *PostGIS) createSchema(schema string) error {
 	var sql string
 	var err error
@@ -340,17 +317,6 @@ func (pg *PostGIS) generalizeTable(table *GeneralizedTableSpec) error {
 	_, err = tx.Exec(sql)
 	if err != nil {
 		return &SQLError{sql, err}
-	}
-
-	postgisVersion, err := getPostgisVersion(tx)
-	if err != nil {
-		return errors.Wrap(err, "detecting PostGIS version")
-	}
-	if strings.HasPrefix(postgisVersion, "0.") || strings.HasPrefix(postgisVersion, "1.") {
-		err = populateGeometryColumn(tx, table.FullName, *table.Source)
-		if err != nil {
-			return errors.Wrap(err, "populating GeometryColumn for PostGIS < 2")
-		}
 	}
 
 	err = tx.Commit()
