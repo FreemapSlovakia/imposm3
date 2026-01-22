@@ -21,7 +21,7 @@ func (m *Mapping) NodeTagFilter() TagFilterer {
 	tags := make(map[Key]bool)
 	m.extraTags(PointTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings.asTagMap(), tags}
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
 }
 
 func (m *Mapping) WayTagFilter() TagFilterer {
@@ -35,7 +35,7 @@ func (m *Mapping) WayTagFilter() TagFilterer {
 	m.extraTags(LineStringTable, tags)
 	m.extraTags(PolygonTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings.asTagMap(), tags}
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
 }
 
 func (m *Mapping) RelationTagFilter() TagFilterer {
@@ -58,7 +58,7 @@ func (m *Mapping) RelationTagFilter() TagFilterer {
 	m.extraTags(PolygonTable, tags)
 	m.extraTags(RelationTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings.asTagMap(), tags}
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
 }
 
 type tagMap map[Key]map[Value]struct{}
@@ -66,6 +66,7 @@ type tagMap map[Key]map[Value]struct{}
 type tagFilter struct {
 	mappings  tagMap
 	extraTags map[Key]bool
+	splitValues bool
 }
 
 func (f *tagFilter) Filter(tags *osm.Tags) {
@@ -77,7 +78,7 @@ func (f *tagFilter) Filter(tags *osm.Tags) {
 		if ok {
 			if _, ok := values["__any__"]; ok {
 				continue
-			} else if _, ok := values[Value(v)]; ok {
+			} else if mappingValueMatches(values, v, f.splitValues) {
 				continue
 			} else if _, ok := f.extraTags[Key(k)]; !ok {
 				delete(*tags, k)

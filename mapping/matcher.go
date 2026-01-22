@@ -1,6 +1,9 @@
 package mapping
 
 import (
+	"sort"
+	"strings"
+
 	osm "github.com/omniscale/go-osm"
 	"github.com/omniscale/imposm3/geom"
 )
@@ -13,10 +16,11 @@ func (m *Mapping) pointMatcher() (NodeMatcher, error) {
 	m.addTypedFilters(PointTable, filters)
 	tables, err := m.tables(PointTable)
 	return &tagMatcher{
-		mappings:   mappings,
-		filters:    filters,
-		tables:     tables,
-		matchAreas: false,
+		mappings:     mappings,
+		filters:      filters,
+		tables:       tables,
+		valueOptions: m.valueOptions(PointTable),
+		matchAreas:   false,
 	}, err
 }
 
@@ -28,10 +32,11 @@ func (m *Mapping) lineStringMatcher() (WayMatcher, error) {
 	m.addTypedFilters(LineStringTable, filters)
 	tables, err := m.tables(LineStringTable)
 	return &tagMatcher{
-		mappings:   mappings,
-		filters:    filters,
-		tables:     tables,
-		matchAreas: false,
+		mappings:     mappings,
+		filters:      filters,
+		tables:       tables,
+		valueOptions: m.valueOptions(LineStringTable),
+		matchAreas:   false,
 	}, err
 }
 
@@ -45,11 +50,12 @@ func (m *Mapping) polygonMatcher() (RelWayMatcher, error) {
 	m.addRelationFilters(PolygonTable, relFilters)
 	tables, err := m.tables(PolygonTable)
 	return &tagMatcher{
-		mappings:   mappings,
-		filters:    filters,
-		tables:     tables,
-		relFilters: relFilters,
-		matchAreas: true,
+		mappings:     mappings,
+		filters:      filters,
+		tables:       tables,
+		relFilters:   relFilters,
+		valueOptions: m.valueOptions(PolygonTable),
+		matchAreas:   true,
 	}, err
 }
 
@@ -64,11 +70,12 @@ func (m *Mapping) relationMatcher() (RelationMatcher, error) {
 	m.addRelationFilters(RelationTable, relFilters)
 	tables, err := m.tables(RelationTable)
 	return &tagMatcher{
-		mappings:   mappings,
-		filters:    filters,
-		tables:     tables,
-		relFilters: relFilters,
-		matchAreas: true,
+		mappings:     mappings,
+		filters:      filters,
+		tables:       tables,
+		relFilters:   relFilters,
+		valueOptions: m.valueOptions(RelationTable),
+		matchAreas:   true,
 	}, err
 }
 
@@ -82,11 +89,12 @@ func (m *Mapping) relationMemberMatcher() (RelationMatcher, error) {
 	m.addRelationFilters(RelationMemberTable, relFilters)
 	tables, err := m.tables(RelationMemberTable)
 	return &tagMatcher{
-		mappings:   mappings,
-		filters:    filters,
-		tables:     tables,
-		relFilters: relFilters,
-		matchAreas: true,
+		mappings:     mappings,
+		filters:      filters,
+		tables:       tables,
+		relFilters:   relFilters,
+		valueOptions: m.valueOptions(RelationMemberTable),
+		matchAreas:   true,
 	}, err
 }
 
@@ -122,12 +130,18 @@ func (m *Match) MemberRow(rel *osm.Relation, member *osm.Member, memberIndex int
 	return m.builder.MakeMemberRow(rel, member, memberIndex, geom, *m)
 }
 
+type tableValueOptions struct {
+	splitValues bool
+	multiValues map[Key]struct{}
+}
+
 type tagMatcher struct {
-	mappings   TagTableMapping
-	tables     map[string]*rowBuilder
-	filters    tableElementFilters
-	relFilters tableElementFilters
-	matchAreas bool
+	mappings     TagTableMapping
+	tables       map[string]*rowBuilder
+	filters      tableElementFilters
+	relFilters   tableElementFilters
+	valueOptions map[string]tableValueOptions
+	matchAreas   bool
 }
 
 func (tm *tagMatcher) MatchNode(node *osm.Node) []Match {
@@ -164,45 +178,95 @@ type orderedMatch struct {
 }
 
 func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
-	tables := make(map[DestTable]orderedMatch)
+	type tableKeyMatches struct {
+		order   int
+		matches []orderedMatch
+	}
 
-	addTables := func(k, v string, tbls []orderedDestTable) {
-		for _, t := range tbls {
-			this := orderedMatch{
-				Match: Match{
-					Key:     k,
-					Value:   v,
-					Table:   t.DestTable,
-					builder: tm.tables[t.Name],
-				},
-				order: t.order,
-			}
-			if other, ok := tables[t.DestTable]; ok {
-				if other.order < this.order {
-					this = other
-				}
-			}
-			tables[t.DestTable] = this
+	tables := make(map[DestTable]map[Key]*tableKeyMatches)
+
+	addTableMatch := func(k, v string, t orderedDestTable) {
+		keyMatches, ok := tables[t.DestTable]
+		if !ok {
+			keyMatches = make(map[Key]*tableKeyMatches)
+			tables[t.DestTable] = keyMatches
 		}
+
+		entry, ok := keyMatches[Key(k)]
+		if !ok {
+			entry = &tableKeyMatches{order: t.order}
+			keyMatches[Key(k)] = entry
+		} else if t.order < entry.order {
+			entry.order = t.order
+		}
+
+		entry.matches = append(entry.matches, orderedMatch{
+			Match: Match{
+				Key:     k,
+				Value:   v,
+				Table:   t.DestTable,
+				builder: tm.tables[t.Name],
+			},
+			order: t.order,
+		})
 	}
 
 	if values, ok := tm.mappings[Key("__any__")]; ok {
-		addTables("__any__", "__any__", values["__any__"])
+		for _, t := range values["__any__"] {
+			addTableMatch("__any__", "__any__", t)
+		}
 	}
 
 	for k, v := range tags {
 		values, ok := tm.mappings[Key(k)]
 		if ok {
 			if tbls, ok := values["__any__"]; ok {
-				addTables(k, v, tbls)
+				for _, t := range tbls {
+					addTableMatch(k, v, t)
+				}
 			}
 			if tbls, ok := values[Value(v)]; ok {
-				addTables(k, v, tbls)
+				for _, t := range tbls {
+					addTableMatch(k, v, t)
+				}
+			}
+			if strings.Contains(v, ";") {
+				for _, val := range splitTagValues(v) {
+					if tbls, ok := values[Value(val)]; ok {
+						for _, t := range tbls {
+							if tm.splitValuesForTable(t.Name) {
+								addTableMatch(k, val, t)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 	var matches []Match
-	for t, match := range tables {
+	for t, keyMatches := range tables {
+		var selected *tableKeyMatches
+		for key, entry := range keyMatches {
+			if !tm.multiValuesForTableKey(t.Name, key) {
+				entry.matches = reduceMatches(entry.matches)
+				if len(entry.matches) == 0 {
+					continue
+				}
+				entry.order = entry.matches[0].order
+			}
+			if selected == nil || entry.order < selected.order {
+				selected = entry
+			}
+		}
+		if selected == nil || len(selected.matches) == 0 {
+			continue
+		}
+
+		sort.SliceStable(selected.matches, func(i, j int) bool {
+			return selected.matches[i].order < selected.matches[j].order
+		})
+
+		match := selected.matches[0].Match
 		filters, ok := tm.filters[t.Name]
 		filteredOut := false
 		if ok {
@@ -226,10 +290,40 @@ func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
 		}
 
 		if !filteredOut {
-			matches = append(matches, match.Match)
+			for _, selectedMatch := range selected.matches {
+				matches = append(matches, selectedMatch.Match)
+			}
 		}
 	}
 	return matches
+}
+
+func (tm *tagMatcher) splitValuesForTable(tableName string) bool {
+	if opt, ok := tm.valueOptions[tableName]; ok {
+		return opt.splitValues
+	}
+	return false
+}
+
+func (tm *tagMatcher) multiValuesForTableKey(tableName string, key Key) bool {
+	if opt, ok := tm.valueOptions[tableName]; ok {
+		_, ok := opt.multiValues[key]
+		return ok
+	}
+	return false
+}
+
+func reduceMatches(matches []orderedMatch) []orderedMatch {
+	if len(matches) == 0 {
+		return matches
+	}
+	best := matches[0]
+	for i := 1; i < len(matches); i++ {
+		if matches[i].order < best.order {
+			best = matches[i]
+		}
+	}
+	return []orderedMatch{best}
 }
 
 type valueBuilder struct {

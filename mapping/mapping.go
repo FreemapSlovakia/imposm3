@@ -166,6 +166,43 @@ func (m *Mapping) createMatcher() error {
 	return nil
 }
 
+func (m *Mapping) splitValuesForTable(t *config.Table) bool {
+	if t.SplitValues != nil {
+		return *t.SplitValues
+	}
+	return m.Conf.SplitValues
+}
+
+func (m *Mapping) valueOptions(tableType TableType) map[string]tableValueOptions {
+	options := make(map[string]tableValueOptions)
+	for name, t := range m.Conf.Tables {
+		if TableType(t.Type) != GeometryTable && TableType(t.Type) != tableType {
+			continue
+		}
+		multiValues := make(map[Key]struct{})
+		for _, key := range t.MultiValues {
+			multiValues[Key(key)] = struct{}{}
+		}
+		options[name] = tableValueOptions{
+			splitValues: m.splitValuesForTable(t),
+			multiValues: multiValues,
+		}
+	}
+	return options
+}
+
+func (m *Mapping) splitValuesForFilters() bool {
+	if m.Conf.SplitValues {
+		return true
+	}
+	for _, t := range m.Conf.Tables {
+		if t.SplitValues != nil && *t.SplitValues {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Mapping) mappings(tableType TableType, mappings TagTableMapping) {
 	for name, t := range m.Conf.Tables {
 		if TableType(t.Type) != GeometryTable && TableType(t.Type) != tableType {
@@ -377,32 +414,32 @@ func (m *Mapping) addFilters(filters tableElementFilters) {
 						Order: 1,
 					},
 				}
-				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, keyname, vararr))
+				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, keyname, vararr, m.splitValuesForTable(t)))
 
 			}
 		}
 
 		if t.Filters.Require != nil {
 			for keyname, vararr := range t.Filters.Require {
-				filters[name] = append(filters[name], makeFiltersFunction(name, true, false, string(keyname), vararr))
+				filters[name] = append(filters[name], makeFiltersFunction(name, true, false, string(keyname), vararr, m.splitValuesForTable(t)))
 			}
 		}
 
 		if t.Filters.Reject != nil {
 			for keyname, vararr := range t.Filters.Reject {
-				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, string(keyname), vararr))
+				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, string(keyname), vararr, m.splitValuesForTable(t)))
 			}
 		}
 
 		if t.Filters.RequireRegexp != nil {
 			for keyname, regexp := range t.Filters.RequireRegexp {
-				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, true, false, string(keyname), regexp))
+				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, true, false, string(keyname), regexp, m.splitValuesForTable(t)))
 			}
 		}
 
 		if t.Filters.RejectRegexp != nil {
 			for keyname, regexp := range t.Filters.RejectRegexp {
-				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, false, true, string(keyname), regexp))
+				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, false, true, string(keyname), regexp, m.splitValuesForTable(t)))
 			}
 		}
 
@@ -418,20 +455,28 @@ func findValueInOrderedValue(v config.Value, list []config.OrderedValue) bool {
 	return false
 }
 
-func makeRegexpFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, vKeyname string, vRegexp string) func(tags osm.Tags, key Key, closed bool) bool {
+func makeRegexpFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, vKeyname string, vRegexp string, splitValues bool) func(tags osm.Tags, key Key, closed bool) bool {
 	// Compile regular expression,  if not valid regexp --> panic !
 	r := regexp.MustCompile(vRegexp)
 	return func(tags osm.Tags, key Key, closed bool) bool {
 		if v, ok := tags[vKeyname]; ok {
-			if r.MatchString(v) {
-				return virtualTrue
+			if !splitValues {
+				if r.MatchString(v) {
+					return virtualTrue
+				}
+				return virtualFalse
+			}
+			for _, value := range splitTagValues(v) {
+				if r.MatchString(value) {
+					return virtualTrue
+				}
 			}
 		}
 		return virtualFalse
 	}
 }
 
-func makeFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, vKeyname string, vVararr []config.OrderedValue) func(tags osm.Tags, key Key, closed bool) bool {
+func makeFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, vKeyname string, vVararr []config.OrderedValue, splitValues bool) func(tags osm.Tags, key Key, closed bool) bool {
 
 	if findValueInOrderedValue("__nil__", vVararr) { // check __nil__
 		log.Println("[warn] Filter value '__nil__' is not supported ! (tablename:" + tablename + ")")
@@ -450,8 +495,16 @@ func makeFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, 
 	} else if len(vVararr) == 1 { //  IF 1 parameter  THEN we can generate optimal code
 		return func(tags osm.Tags, key Key, closed bool) bool {
 			if v, ok := tags[vKeyname]; ok {
-				if config.Value(v) == vVararr[0].Value {
-					return virtualTrue
+				if !splitValues {
+					if config.Value(v) == vVararr[0].Value {
+						return virtualTrue
+					}
+					return virtualFalse
+				}
+				for _, value := range splitTagValues(v) {
+					if config.Value(value) == vVararr[0].Value {
+						return virtualTrue
+					}
 				}
 			}
 			return virtualFalse
@@ -459,8 +512,16 @@ func makeFiltersFunction(tablename string, virtualTrue bool, virtualFalse bool, 
 	} else { //  > 1 parameter  - less optimal code
 		return func(tags osm.Tags, key Key, closed bool) bool {
 			if v, ok := tags[vKeyname]; ok {
-				if findValueInOrderedValue(config.Value(v), vVararr) {
-					return virtualTrue
+				if !splitValues {
+					if findValueInOrderedValue(config.Value(v), vVararr) {
+						return virtualTrue
+					}
+					return virtualFalse
+				}
+				for _, value := range splitTagValues(v) {
+					if findValueInOrderedValue(config.Value(value), vVararr) {
+						return virtualTrue
+					}
 				}
 			}
 			return virtualFalse
