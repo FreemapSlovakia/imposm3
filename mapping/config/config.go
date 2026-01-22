@@ -36,6 +36,8 @@ type Table struct {
 	OldFields     []*Column             `yaml:"fields"`
 	Filters       *Filters              `yaml:"filters"`
 	RelationTypes []string              `yaml:"relation_types"`
+	// GeometryTransform can be used to transform geometries before insertion.
+	GeometryTransform string `yaml:"geometry_transform"`
 }
 
 type GeneralizedTables map[string]*GeneralizedTable

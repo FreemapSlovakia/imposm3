@@ -128,6 +128,14 @@ func (m *Mapping) prepare() error {
 			return errors.Errorf("missing type for table %s", name)
 		}
 
+		if t.GeometryTransform != "" {
+			normalized, err := normalizeGeometryTransform(t.GeometryTransform)
+			if err != nil {
+				return errors.Wrapf(err, "table %s", name)
+			}
+			t.GeometryTransform = normalized
+		}
+
 		if TableType(t.Type) == GeometryTable {
 			if t.Mapping != nil || t.Mappings != nil {
 				return errors.Errorf("table with type:geometry requires type_mappings for table %s", name)
@@ -213,6 +221,9 @@ func makeRowBuilder(tbl *config.Table) (*rowBuilder, error) {
 		columnType, err := MakeColumnType(mappingColumn)
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating column %s", mappingColumn.Name)
+		}
+		if tbl.GeometryTransform != "" && (columnType.Name == "geometry" || columnType.Name == "validated_geometry") {
+			columnType.Func = makeGeometryTransformFunc(tbl.GeometryTransform)
 		}
 		column.colType = *columnType
 		result.columns = append(result.columns, column)
