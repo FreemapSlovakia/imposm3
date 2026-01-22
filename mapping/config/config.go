@@ -11,6 +11,7 @@ type Mapping struct {
 	GeneralizedTables GeneralizedTables `yaml:"generalized_tables"`
 	Tags              Tags              `yaml:"tags"`
 	Areas             Areas             `yaml:"areas"`
+	SplitValues       bool              `yaml:"split_values"`
 	// SingleIDSpace mangles the overlapping node/way/relation IDs
 	// to be unique (nodes positive, ways negative, relations negative -1e17)
 	SingleIDSpace bool `yaml:"use_single_id_space"`
@@ -27,17 +28,18 @@ type Column struct {
 
 type Tables map[string]*Table
 type Table struct {
-	Name          string
-	Type          string                `yaml:"type"`
-	Mapping       KeyValues             `yaml:"mapping"`
-	Mappings      map[string]SubMapping `yaml:"mappings"`
-	TypeMappings  TypeMappings          `yaml:"type_mappings"`
-	Columns       []*Column             `yaml:"columns"`
-	OldFields     []*Column             `yaml:"fields"`
-	Filters       *Filters              `yaml:"filters"`
-	RelationTypes []string              `yaml:"relation_types"`
-	// GeometryTransform can be used to transform geometries before insertion.
-	GeometryTransform string `yaml:"geometry_transform"`
+	Name              string
+	Type              string                `yaml:"type"`
+	Mapping           KeyValues             `yaml:"mapping"`
+	Mappings          map[string]SubMapping `yaml:"mappings"`
+	TypeMappings      TypeMappings          `yaml:"type_mappings"`
+	Columns           []*Column             `yaml:"columns"`
+	OldFields         []*Column             `yaml:"fields"`
+	Filters           *Filters              `yaml:"filters"`
+	RelationTypes     []string              `yaml:"relation_types"`
+	GeometryTransform string                `yaml:"geometry_transform"`
+	SplitValues       *bool                 `yaml:"split_values"`
+	MultiValues       []Key                 `yaml:"multi_values"`
 }
 
 type GeneralizedTables map[string]*GeneralizedTable
