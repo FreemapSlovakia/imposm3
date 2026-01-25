@@ -18,12 +18,15 @@ type Mapping struct {
 }
 
 type Column struct {
-	Name       string                 `yaml:"name"`
-	Key        Key                    `yaml:"key"`
-	Keys       []Key                  `yaml:"keys"`
-	Type       string                 `yaml:"type"`
-	Args       map[string]interface{} `yaml:"args"`
-	FromMember bool                   `yaml:"from_member"`
+	Name       string                       `yaml:"name"`
+	Key        Key                          `yaml:"key"`
+	Keys       []Key                        `yaml:"keys"`
+	Type       string                       `yaml:"type"`
+	Args       map[string]interface{}       `yaml:"args"`
+	Aliases    map[string]map[string]string `yaml:"aliases"`
+	// GeometryTransform can be used to transform geometry columns before insertion.
+	GeometryTransform string `yaml:"geometry_transform"`
+	FromMember bool                         `yaml:"from_member"`
 }
 
 type Tables map[string]*Table
@@ -37,7 +40,6 @@ type Table struct {
 	OldFields         []*Column             `yaml:"fields"`
 	Filters           *Filters              `yaml:"filters"`
 	RelationTypes     []string              `yaml:"relation_types"`
-	GeometryTransform string                `yaml:"geometry_transform"`
 	SplitValues       *bool                 `yaml:"split_values"`
 	MultiValues       []Key                 `yaml:"multi_values"`
 }
@@ -116,7 +118,38 @@ type SubMapping struct {
 }
 
 type TypeMappings struct {
-	Points      KeyValues `yaml:"points"`
-	LineStrings KeyValues `yaml:"linestrings"`
-	Polygons    KeyValues `yaml:"polygons"`
+	Points      TypeMapping `yaml:"points"`
+	LineStrings TypeMapping `yaml:"linestrings"`
+	Polygons    TypeMapping `yaml:"polygons"`
+	Any         TypeMapping `yaml:"any"`
+}
+
+type TypeMapping struct {
+	Mapping  KeyValues             `yaml:"mapping"`
+	Mappings map[string]SubMapping `yaml:"mappings"`
+}
+
+func (tm *TypeMapping) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	raw := map[interface{}]interface{}{}
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	_, hasMapping := raw["mapping"]
+	_, hasMappings := raw["mappings"]
+	if hasMapping || hasMappings {
+		type alias TypeMapping
+		var parsed alias
+		if err := unmarshal(&parsed); err != nil {
+			return err
+		}
+		*tm = TypeMapping(parsed)
+		return nil
+	}
+
+	var kv KeyValues
+	if err := unmarshal(&kv); err != nil {
+		return err
+	}
+	tm.Mapping = kv
+	return nil
 }

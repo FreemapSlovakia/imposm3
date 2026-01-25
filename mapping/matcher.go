@@ -6,6 +6,7 @@ import (
 
 	osm "github.com/omniscale/go-osm"
 	"github.com/omniscale/imposm3/geom"
+	"github.com/omniscale/imposm3/log"
 )
 
 func (m *Mapping) pointMatcher() (NodeMatcher, error) {
@@ -144,32 +145,93 @@ type tagMatcher struct {
 	matchAreas   bool
 }
 
+const debugNodeID int64 = 2791300049
+
+func (tm *tagMatcher) logBusStopMatches(elemType string, id int64, closed bool, relation bool, matches []Match) {
+	if len(matches) == 0 {
+		log.Printf("[info] no match for highway=bus_stop on %s %d (closed=%t relation=%t)", elemType, id, closed, relation)
+		return
+	}
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if match.Table.SubMapping != "" {
+			names = append(names, match.Table.Name+":"+match.Table.SubMapping)
+		} else {
+			names = append(names, match.Table.Name)
+		}
+	}
+	log.Printf("[info] matches for highway=bus_stop on %s %d (closed=%t relation=%t): %s", elemType, id, closed, relation, strings.Join(names, ", "))
+}
+
 func (tm *tagMatcher) MatchNode(node *osm.Node) []Match {
-	return tm.match(node.Tags, false, false)
+	if node.ID == debugNodeID {
+		tm.logDebugNodeMapping(node.Tags)
+	}
+	matches := tm.match(node.Tags, false, false)
+	if node.ID == debugNodeID {
+		tm.logBusStopMatches("node", node.ID, false, false, matches)
+	}
+	return matches
+}
+
+func (tm *tagMatcher) logDebugNodeMapping(tags osm.Tags) {
+	highway, ok := tags["highway"]
+	if !ok {
+		log.Printf("[info] debug node missing highway tag; tags=%v", tags)
+		return
+	}
+	values, ok := tm.mappings[Key("highway")]
+	if !ok {
+		log.Printf("[info] debug node highway=%s but no highway mapping; tags=%v", highway, tags)
+		return
+	}
+	anyTables := destTableNames(values[Value("__any__")])
+	valueTables := destTableNames(values[Value(highway)])
+	log.Printf("[info] debug node highway=%s mapping: any=%v value=%v tags=%v", highway, anyTables, valueTables, tags)
+}
+
+func destTableNames(entries []orderedDestTable) []string {
+	if len(entries) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.DestTable.SubMapping != "" {
+			names = append(names, entry.DestTable.Name+":"+entry.DestTable.SubMapping)
+		} else {
+			names = append(names, entry.DestTable.Name)
+		}
+	}
+	return names
+}
+
+func isDebugBusStop(tags osm.Tags) bool {
+	return tags["highway"] == "bus_stop" && tags["name"] == "Medzev, SOU"
 }
 
 func (tm *tagMatcher) MatchWay(way *osm.Way) []Match {
+	var matches []Match
 	if tm.matchAreas { // match way as polygon
 		if way.IsClosed() {
-			if way.Tags["area"] == "no" {
-				return nil
+			if way.Tags["area"] != "no" {
+				matches = tm.match(way.Tags, true, false)
 			}
-			return tm.match(way.Tags, true, false)
 		}
 	} else { // match way as linestring
 		if way.IsClosed() {
-			if way.Tags["area"] == "yes" {
-				return nil
+			if way.Tags["area"] != "yes" {
+				matches = tm.match(way.Tags, true, false)
 			}
-			return tm.match(way.Tags, true, false)
+		} else {
+			matches = tm.match(way.Tags, false, false)
 		}
-		return tm.match(way.Tags, false, false)
 	}
-	return nil
+	return matches
 }
 
 func (tm *tagMatcher) MatchRelation(rel *osm.Relation) []Match {
-	return tm.match(rel.Tags, true, true)
+	matches := tm.match(rel.Tags, true, true)
+	return matches
 }
 
 type orderedMatch struct {
@@ -273,6 +335,9 @@ func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
 			for _, filter := range filters {
 				if !filter(tags, Key(match.Key), closed) {
 					filteredOut = true
+					if isDebugBusStop(tags) {
+						log.Printf("[info] debug node filtered by table filter for %s (key=%s closed=%t relation=%t)", t.Name, match.Key, closed, relation)
+					}
 					break
 				}
 			}
@@ -283,6 +348,9 @@ func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
 				for _, filter := range filters {
 					if !filter(tags, Key(match.Key), closed) {
 						filteredOut = true
+						if isDebugBusStop(tags) {
+							log.Printf("[info] debug node filtered by relation filter for %s (key=%s closed=%t)", t.Name, match.Key, closed)
+						}
 						break
 					}
 				}

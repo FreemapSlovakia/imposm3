@@ -64,6 +64,8 @@ func (tt *TableType) UnmarshalJSON(data []byte) error {
 		*tt = PolygonTable
 	case `"geometry"`:
 		*tt = GeometryTable
+	case `"point_or_polygon"`:
+		*tt = PointOrPolygonTable
 	case `"relation"`:
 		*tt = RelationTable
 	case `"relation_member"`:
@@ -77,6 +79,7 @@ const (
 	LineStringTable     TableType = "linestring"
 	PointTable          TableType = "point"
 	GeometryTable       TableType = "geometry"
+	PointOrPolygonTable TableType = "point_or_polygon"
 	RelationTable       TableType = "relation"
 	RelationMemberTable TableType = "relation_member"
 )
@@ -100,7 +103,7 @@ func FromFile(filename string) (*Mapping, error) {
 
 func New(b []byte) (*Mapping, error) {
 	mapping := Mapping{}
-	err := yaml.Unmarshal(b, &mapping.Conf)
+	err := yaml.UnmarshalStrict(b, &mapping.Conf)
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +129,6 @@ func (m *Mapping) prepare() error {
 		}
 		if t.Type == "" {
 			return errors.Errorf("missing type for table %s", name)
-		}
-
-		if t.GeometryTransform != "" {
-			normalized, err := normalizeGeometryTransform(t.GeometryTransform)
-			if err != nil {
-				return errors.Wrapf(err, "table %s", name)
-			}
-			t.GeometryTransform = normalized
 		}
 
 		if TableType(t.Type) == GeometryTable {
@@ -213,7 +208,7 @@ func (m *Mapping) splitValuesForFilters() bool {
 
 func (m *Mapping) mappings(tableType TableType, mappings TagTableMapping) {
 	for name, t := range m.Conf.Tables {
-		if TableType(t.Type) != GeometryTable && TableType(t.Type) != tableType {
+		if !tableMatchesType(t, tableType) {
 			continue
 		}
 		mappings.addFromMapping(t.Mapping, DestTable{Name: name})
@@ -222,14 +217,24 @@ func (m *Mapping) mappings(tableType TableType, mappings TagTableMapping) {
 			mappings.addFromMapping(subMapping.Mapping, DestTable{Name: name, SubMapping: subMappingName})
 		}
 
+		addTypeMapping := func(typeMapping config.TypeMapping) {
+			if typeMapping.Mapping != nil {
+				mappings.addFromMapping(typeMapping.Mapping, DestTable{Name: name})
+			}
+			for subMappingName, subMapping := range typeMapping.Mappings {
+				mappings.addFromMapping(subMapping.Mapping, DestTable{Name: name, SubMapping: subMappingName})
+			}
+		}
+
 		switch tableType {
 		case PointTable:
-			mappings.addFromMapping(t.TypeMappings.Points, DestTable{Name: name})
+			addTypeMapping(t.TypeMappings.Points)
 		case LineStringTable:
-			mappings.addFromMapping(t.TypeMappings.LineStrings, DestTable{Name: name})
+			addTypeMapping(t.TypeMappings.LineStrings)
 		case PolygonTable:
-			mappings.addFromMapping(t.TypeMappings.Polygons, DestTable{Name: name})
+			addTypeMapping(t.TypeMappings.Polygons)
 		}
+		addTypeMapping(t.TypeMappings.Any)
 	}
 }
 
@@ -237,7 +242,7 @@ func (m *Mapping) tables(tableType TableType) (map[string]*rowBuilder, error) {
 	var err error
 	result := make(map[string]*rowBuilder)
 	for name, t := range m.Conf.Tables {
-		if TableType(t.Type) == tableType || TableType(t.Type) == GeometryTable {
+		if tableMatchesType(t, tableType) {
 			result[name], err = makeRowBuilder(t)
 			if err != nil {
 				return nil, errors.Wrapf(err, "creating row builder for %s", name)
@@ -259,8 +264,12 @@ func makeRowBuilder(tbl *config.Table) (*rowBuilder, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating column %s", mappingColumn.Name)
 		}
-		if tbl.GeometryTransform != "" && (columnType.Name == "geometry" || columnType.Name == "validated_geometry") {
-			columnType.Func = makeGeometryTransformFunc(tbl.GeometryTransform)
+		if mappingColumn.GeometryTransform != "" && (columnType.Name == "geometry" || columnType.Name == "validated_geometry") {
+			normalized, err := normalizeGeometryTransform(mappingColumn.GeometryTransform)
+			if err != nil {
+				return nil, errors.Wrapf(err, "column %s", mappingColumn.Name)
+			}
+			columnType.Func = makeGeometryTransformFunc(normalized)
 		}
 		column.colType = *columnType
 		result.columns = append(result.columns, column)
@@ -287,7 +296,7 @@ func MakeColumnType(c *config.Column) (*ColumnType, error) {
 
 func (m *Mapping) extraTags(tableType TableType, tags map[Key]bool) {
 	for _, t := range m.Conf.Tables {
-		if TableType(t.Type) != tableType && TableType(t.Type) != GeometryTable {
+		if !tableMatchesType(t, tableType) {
 			continue
 		}
 
@@ -341,7 +350,7 @@ func (m *Mapping) addTypedFilters(tableType TableType, filters tableElementFilte
 	}
 
 	for name, t := range m.Conf.Tables {
-		if TableType(t.Type) != GeometryTable && TableType(t.Type) != tableType {
+		if !tableMatchesType(t, tableType) {
 			continue
 		}
 		if TableType(t.Type) == LineStringTable && areaTags != nil {
@@ -360,7 +369,7 @@ func (m *Mapping) addTypedFilters(tableType TableType, filters tableElementFilte
 			}
 			filters[name] = append(filters[name], f)
 		}
-		if TableType(t.Type) == PolygonTable && linearTags != nil {
+		if (TableType(t.Type) == PolygonTable || (TableType(t.Type) == PointOrPolygonTable && tableType == PolygonTable)) && linearTags != nil {
 			f := func(tags osm.Tags, key Key, closed bool) bool {
 				if closed && tags["area"] == "no" {
 					return false
@@ -393,7 +402,7 @@ func (m *Mapping) addRelationFilters(tableType TableType, filters tableElementFi
 			}
 			filters[name] = append(filters[name], f)
 		} else {
-			if TableType(t.Type) == PolygonTable {
+			if TableType(t.Type) == PolygonTable || TableType(t.Type) == PointOrPolygonTable {
 				// standard multipolygon handling (boundary and land_area are for backwards compatibility)
 				f := func(tags osm.Tags, key Key, closed bool) bool {
 					if v, ok := tags["type"]; ok {
@@ -407,6 +416,17 @@ func (m *Mapping) addRelationFilters(tableType TableType, filters tableElementFi
 			}
 		}
 	}
+}
+
+func tableMatchesType(t *config.Table, tableType TableType) bool {
+	ttype := TableType(t.Type)
+	if ttype == GeometryTable || ttype == tableType {
+		return true
+	}
+	if ttype == PointOrPolygonTable && (tableType == PointTable || tableType == PolygonTable) {
+		return true
+	}
+	return false
 }
 
 func (m *Mapping) addFilters(filters tableElementFilters) {
