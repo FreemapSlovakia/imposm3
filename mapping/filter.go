@@ -21,7 +21,8 @@ func (m *Mapping) NodeTagFilter() TagFilterer {
 	tags := make(map[Key]bool)
 	m.extraTags(PointTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
+	splitKeys, splitAny := m.multiValueKeysForFilters(PointTable, RelationMemberTable)
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
 }
 
 func (m *Mapping) WayTagFilter() TagFilterer {
@@ -35,7 +36,8 @@ func (m *Mapping) WayTagFilter() TagFilterer {
 	m.extraTags(LineStringTable, tags)
 	m.extraTags(PolygonTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
+	splitKeys, splitAny := m.multiValueKeysForFilters(LineStringTable, PolygonTable, RelationMemberTable)
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
 }
 
 func (m *Mapping) RelationTagFilter() TagFilterer {
@@ -58,7 +60,8 @@ func (m *Mapping) RelationTagFilter() TagFilterer {
 	m.extraTags(PolygonTable, tags)
 	m.extraTags(RelationTable, tags)
 	m.extraTags(RelationMemberTable, tags)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitValues: m.splitValuesForFilters()}
+	splitKeys, splitAny := m.multiValueKeysForFilters(LineStringTable, PolygonTable, RelationTable, RelationMemberTable)
+	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
 }
 
 type tagMap map[Key]map[Value]struct{}
@@ -66,7 +69,8 @@ type tagMap map[Key]map[Value]struct{}
 type tagFilter struct {
 	mappings  tagMap
 	extraTags map[Key]bool
-	splitValues bool
+	splitKeys map[Key]bool
+	splitAny  bool
 }
 
 func (f *tagFilter) Filter(tags *osm.Tags) {
@@ -75,10 +79,11 @@ func (f *tagFilter) Filter(tags *osm.Tags) {
 	}
 	for k, v := range *tags {
 		values, ok := f.mappings[Key(k)]
+		splitValues := f.splitAny || f.splitKeys[Key(k)]
 		if ok {
 			if _, ok := values["__any__"]; ok {
 				continue
-			} else if mappingValueMatches(values, v, f.splitValues) {
+			} else if mappingValueMatches(values, v, splitValues) {
 				continue
 			} else if _, ok := f.extraTags[Key(k)]; !ok {
 				delete(*tags, k)

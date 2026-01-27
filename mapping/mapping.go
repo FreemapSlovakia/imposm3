@@ -169,41 +169,68 @@ func (m *Mapping) createMatcher() error {
 	return nil
 }
 
-func (m *Mapping) splitValuesForTable(t *config.Table) bool {
-	if t.SplitValues != nil {
-		return *t.SplitValues
-	}
-	return m.Conf.SplitValues
-}
+type tableElementMultiValues map[string]map[Key]struct{}
 
-func (m *Mapping) valueOptions(tableType TableType) map[string]tableValueOptions {
-	options := make(map[string]tableValueOptions)
+func (m *Mapping) multiValues(tableType TableType) tableElementMultiValues {
+	options := make(tableElementMultiValues)
+
 	for name, t := range m.Conf.Tables {
-		if TableType(t.Type) != GeometryTable && TableType(t.Type) != tableType {
+		if !tableMatchesType(t, tableType) {
 			continue
 		}
+
 		multiValues := make(map[Key]struct{})
+
 		for _, key := range t.MultiValues {
 			multiValues[Key(key)] = struct{}{}
 		}
-		options[name] = tableValueOptions{
-			splitValues: m.splitValuesForTable(t),
-			multiValues: multiValues,
-		}
+
+		options[name] = multiValues
 	}
 	return options
 }
 
-func (m *Mapping) splitValuesForFilters() bool {
-	if m.Conf.SplitValues {
-		return true
+func (m *Mapping) splitValuesForTableKey(t *config.Table, key string) bool {
+	if len(t.MultiValues) == 0 {
+		return false
 	}
-	for _, t := range m.Conf.Tables {
-		if t.SplitValues != nil && *t.SplitValues {
+
+	for _, k := range t.MultiValues {
+		if k == "__any__" || string(k) == key {
 			return true
 		}
 	}
+
 	return false
+}
+
+func (m *Mapping) multiValueKeysForFilters(tableTypes ...TableType) (map[Key]bool, bool) {
+	keys := make(map[Key]bool)
+	any := false
+	for _, t := range m.Conf.Tables {
+		match := false
+
+		for _, tableType := range tableTypes {
+			if tableMatchesType(t, tableType) {
+				match = true
+				break
+			}
+		}
+
+		if !match {
+			continue
+		}
+
+		for _, key := range t.MultiValues {
+			if key == "__any__" {
+				any = true
+				continue
+			}
+			keys[Key(key)] = true
+		}
+	}
+
+	return keys, any
 }
 
 func (m *Mapping) mappings(tableType TableType, mappings TagTableMapping) {
@@ -445,32 +472,32 @@ func (m *Mapping) addFilters(filters tableElementFilters) {
 						Order: 1,
 					},
 				}
-				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, keyname, vararr, m.splitValuesForTable(t)))
+				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, keyname, vararr, m.splitValuesForTableKey(t, keyname)))
 
 			}
 		}
 
 		if t.Filters.Require != nil {
 			for keyname, vararr := range t.Filters.Require {
-				filters[name] = append(filters[name], makeFiltersFunction(name, true, false, string(keyname), vararr, m.splitValuesForTable(t)))
+				filters[name] = append(filters[name], makeFiltersFunction(name, true, false, string(keyname), vararr, m.splitValuesForTableKey(t, string(keyname))))
 			}
 		}
 
 		if t.Filters.Reject != nil {
 			for keyname, vararr := range t.Filters.Reject {
-				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, string(keyname), vararr, m.splitValuesForTable(t)))
+				filters[name] = append(filters[name], makeFiltersFunction(name, false, true, string(keyname), vararr, m.splitValuesForTableKey(t, string(keyname))))
 			}
 		}
 
 		if t.Filters.RequireRegexp != nil {
 			for keyname, regexp := range t.Filters.RequireRegexp {
-				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, true, false, string(keyname), regexp, m.splitValuesForTable(t)))
+				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, true, false, string(keyname), regexp, m.splitValuesForTableKey(t, string(keyname))))
 			}
 		}
 
 		if t.Filters.RejectRegexp != nil {
 			for keyname, regexp := range t.Filters.RejectRegexp {
-				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, false, true, string(keyname), regexp, m.splitValuesForTable(t)))
+				filters[name] = append(filters[name], makeRegexpFiltersFunction(name, false, true, string(keyname), regexp, m.splitValuesForTableKey(t, string(keyname))))
 			}
 		}
 

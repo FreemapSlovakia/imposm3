@@ -187,11 +187,9 @@ func TestTagFilterRelations(t *testing.T) {
 
 func TestPointMatcher(t *testing.T) {
 	mapping, err := New([]byte(`
-    split_values: true
     tables:
       places:
         type: point
-        split_values: true
         multi_values: [place]
         columns:
         - key: name
@@ -290,11 +288,10 @@ func TestPointMatcherSplitValuesDisabled(t *testing.T) {
 
 func TestPointMatcherMultiValuesDisabled(t *testing.T) {
 	mapping, err := New([]byte(`
-    split_values: true
     tables:
       places:
         type: point
-        split_values: true
+        multi_values: [__any__]
         columns:
         mapping:
           place:
@@ -308,8 +305,14 @@ func TestPointMatcherMultiValuesDisabled(t *testing.T) {
 		tags    osm.Tags
 		matches []Match
 	}{
-		{osm.Tags{"place": "city;town"}, []Match{{"place", "city", DestTable{Name: "places"}, nil}}},
-		{osm.Tags{"place": "town;city"}, []Match{{"place", "city", DestTable{Name: "places"}, nil}}},
+		{osm.Tags{"place": "city;town"}, []Match{
+			{"place", "city", DestTable{Name: "places"}, nil},
+			{"place", "town", DestTable{Name: "places"}, nil},
+		}},
+		{osm.Tags{"place": "town;city"}, []Match{
+			{"place", "town", DestTable{Name: "places"}, nil},
+			{"place", "city", DestTable{Name: "places"}, nil},
+		}},
 	}
 
 	elem := osm.Node{}
@@ -325,11 +328,10 @@ func TestPointMatcherMultiValuesDisabled(t *testing.T) {
 
 func TestPointMatcherFiltersSplitValuesEnabled(t *testing.T) {
 	mapping, err := New([]byte(`
-    split_values: true
     tables:
       places:
         type: point
-        split_values: true
+        multi_values: [amenity]
         filters:
           require:
             amenity: [school]
@@ -395,11 +397,10 @@ func TestPointMatcherFiltersSplitValuesDisabled(t *testing.T) {
 
 func TestPointMatcherRejectFiltersSplitValuesEnabled(t *testing.T) {
 	mapping, err := New([]byte(`
-    split_values: true
     tables:
       places:
         type: point
-        split_values: true
+        multi_values: [amenity]
         filters:
           reject:
             amenity: [school]
