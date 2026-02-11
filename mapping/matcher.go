@@ -140,7 +140,7 @@ type tagMatcher struct {
 }
 
 func (tm *tagMatcher) MatchNode(node *osm.Node) []Match {
-	return tm.match(node.Tags, false, false)
+	return tm.match(node.Tags, "point", false)
 }
 
 func (tm *tagMatcher) MatchWay(way *osm.Way) []Match {
@@ -148,23 +148,23 @@ func (tm *tagMatcher) MatchWay(way *osm.Way) []Match {
 	if tm.matchAreas { // match way as polygon
 		if way.IsClosed() {
 			if way.Tags["area"] != "no" {
-				matches = tm.match(way.Tags, true, false)
+				matches = tm.match(way.Tags, "way", true)
 			}
 		}
 	} else { // match way as linestring
 		if way.IsClosed() {
 			if way.Tags["area"] != "yes" {
-				matches = tm.match(way.Tags, true, false)
+				matches = tm.match(way.Tags, "way", true)
 			}
 		} else {
-			matches = tm.match(way.Tags, false, false)
+			matches = tm.match(way.Tags, "way", false)
 		}
 	}
 	return matches
 }
 
 func (tm *tagMatcher) MatchRelation(rel *osm.Relation) []Match {
-	matches := tm.match(rel.Tags, true, true)
+	matches := tm.match(rel.Tags, "relation", true)
 	return matches
 }
 
@@ -173,7 +173,7 @@ type orderedMatch struct {
 	order int
 }
 
-func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
+func (tm *tagMatcher) match(tags osm.Tags, elemType string, closed bool) []Match {
 	type tableKeyMatches struct {
 		order   int
 		matches []orderedMatch
@@ -272,17 +272,17 @@ func (tm *tagMatcher) match(tags osm.Tags, closed bool, relation bool) []Match {
 		filteredOut := false
 		if ok {
 			for _, filter := range filters {
-				if !filter(tags, Key(match.Key), closed) {
+				if !filter(tags, Key(match.Key), elemType, closed) {
 					filteredOut = true
 					break
 				}
 			}
 		}
-		if relation && !filteredOut {
+		if elemType == "relation" && !filteredOut {
 			filters, ok := tm.relFilters[t.Name]
 			if ok {
 				for _, filter := range filters {
-					if !filter(tags, Key(match.Key), closed) {
+					if !filter(tags, Key(match.Key), elemType, closed) {
 						filteredOut = true
 						break
 					}

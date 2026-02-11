@@ -88,6 +88,34 @@ This is a fork of https://github.com/omniscale/imposm3 with various improvements
         place: [city, town, village]
   ```
 
+- **`filters.filter` (expression-based table filter)**
+  Add a boolean expression for advanced filter logic using (Expr)[https://expr-lang.org/docs/language-definition].
+  Expression variables: `tags` (map), `type` (`point|way|relation`), `closed` (bool).
+  Return `true` to accept, `false` to reject.
+
+  Example:
+
+  ```yaml
+  tables:
+    sports:
+      type: point_or_polygon
+      filters:
+        filter: 'type == "way" and tags["disused:leisure"] == ""'
+      mapping:
+        sport: [tennis]
+  ```
+
+- **`tags.include_regex` (global tag-key include by regex)**
+  Keep extra tags based on regular expressions, without enabling `tags.load_all`.
+  Useful for namespaces like `addr:*` or `contact:*`.
+
+  Example:
+
+  ```yaml
+  tags:
+    include_regex: ["^addr:.*$", "^contact:.*$"]
+  ```
+
 - **Strict YAML parsing**
   Mapping files are parsed with `yaml.UnmarshalStrict`, so unknown fields or wrong shapes fail fast.
 

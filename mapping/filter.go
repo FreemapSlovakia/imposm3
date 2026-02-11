@@ -2,6 +2,7 @@ package mapping
 
 import (
 	"path"
+	"regexp"
 	"strings"
 
 	osm "github.com/omniscale/go-osm"
@@ -22,7 +23,13 @@ func (m *Mapping) NodeTagFilter() TagFilterer {
 	m.extraTags(PointTable, tags)
 	m.extraTags(RelationMemberTable, tags)
 	splitKeys, splitAny := m.multiValueKeysForFilters(PointTable, RelationMemberTable)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
+	return &tagFilter{
+		mappings:       mappings.asTagMap(),
+		extraTags:      tags,
+		splitKeys:      splitKeys,
+		splitAny:       splitAny,
+		includeRegexps: compileRegexps(m.Conf.Tags.IncludeRegex),
+	}
 }
 
 func (m *Mapping) WayTagFilter() TagFilterer {
@@ -37,7 +44,13 @@ func (m *Mapping) WayTagFilter() TagFilterer {
 	m.extraTags(PolygonTable, tags)
 	m.extraTags(RelationMemberTable, tags)
 	splitKeys, splitAny := m.multiValueKeysForFilters(LineStringTable, PolygonTable, RelationMemberTable)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
+	return &tagFilter{
+		mappings:       mappings.asTagMap(),
+		extraTags:      tags,
+		splitKeys:      splitKeys,
+		splitAny:       splitAny,
+		includeRegexps: compileRegexps(m.Conf.Tags.IncludeRegex),
+	}
 }
 
 func (m *Mapping) RelationTagFilter() TagFilterer {
@@ -61,16 +74,23 @@ func (m *Mapping) RelationTagFilter() TagFilterer {
 	m.extraTags(RelationTable, tags)
 	m.extraTags(RelationMemberTable, tags)
 	splitKeys, splitAny := m.multiValueKeysForFilters(LineStringTable, PolygonTable, RelationTable, RelationMemberTable)
-	return &tagFilter{mappings: mappings.asTagMap(), extraTags: tags, splitKeys: splitKeys, splitAny: splitAny}
+	return &tagFilter{
+		mappings:       mappings.asTagMap(),
+		extraTags:      tags,
+		splitKeys:      splitKeys,
+		splitAny:       splitAny,
+		includeRegexps: compileRegexps(m.Conf.Tags.IncludeRegex),
+	}
 }
 
 type tagMap map[Key]map[Value]struct{}
 
 type tagFilter struct {
-	mappings  tagMap
-	extraTags map[Key]bool
-	splitKeys map[Key]bool
-	splitAny  bool
+	mappings       tagMap
+	extraTags      map[Key]bool
+	splitKeys      map[Key]bool
+	splitAny       bool
+	includeRegexps []*regexp.Regexp
 }
 
 func (f *tagFilter) Filter(tags *osm.Tags) {
@@ -86,12 +106,35 @@ func (f *tagFilter) Filter(tags *osm.Tags) {
 			} else if mappingValueMatches(values, v, splitValues) {
 				continue
 			} else if _, ok := f.extraTags[Key(k)]; !ok {
+				if f.matchesIncludeRegex(k) {
+					continue
+				}
 				delete(*tags, k)
 			}
 		} else if _, ok := f.extraTags[Key(k)]; !ok {
+			if f.matchesIncludeRegex(k) {
+				continue
+			}
 			delete(*tags, k)
 		}
 	}
+}
+
+func (f *tagFilter) matchesIncludeRegex(k string) bool {
+	for _, includeRegexp := range f.includeRegexps {
+		if includeRegexp.MatchString(k) {
+			return true
+		}
+	}
+	return false
+}
+
+func compileRegexps(patterns []string) []*regexp.Regexp {
+	result := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pattern := range patterns {
+		result = append(result, regexp.MustCompile(pattern))
+	}
+	return result
 }
 
 type excludeFilter struct {
