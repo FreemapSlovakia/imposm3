@@ -72,6 +72,22 @@ This is a fork of https://github.com/omniscale/imposm3 with various improvements
           __any__: power_other
   ```
 
+- **New column type: `expression` (string result)**
+  Compute a column value with `expr-lang/expr`.
+  The expression must return a string. If it returns another type or evaluation fails, the value is `NULL`.
+  Language reference: https://expr-lang.org/docs/language-definition
+  Available variables: `tags`, `id`, `key`, `value`, `tag`.
+
+  Example:
+
+  ```yaml
+  columns:
+    - name: label
+      type: expression
+      args:
+        expression: 'tags["name"] + " (" + value + ")"'
+  ```
+
 - **`multi_values` (per table)**
   Enables splitting `;`-separated tag values for selected keys and keeps multiple matches for those keys.
   Use `__any__` to apply to all keys in the table.
