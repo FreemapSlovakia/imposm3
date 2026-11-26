@@ -25,10 +25,10 @@ func TestLineString(t *testing.T) {
 
 func TestPolygon(t *testing.T) {
 	nodes := []osm.Node{
-		osm.Node{Lat: 0, Long: 0},
-		osm.Node{Lat: 0, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 0, Long: 0},
+		{Lat: 0, Long: 0},
+		{Lat: 0, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 0, Long: 0},
 	}
 	g := geos.NewGeos()
 	defer g.Finish()
@@ -44,9 +44,9 @@ func TestPolygon(t *testing.T) {
 
 func TestPolygonNotClosed(t *testing.T) {
 	nodes := []osm.Node{
-		osm.Node{Lat: 0, Long: 0},
-		osm.Node{Lat: 0, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
+		{Lat: 0, Long: 0},
+		{Lat: 0, Long: 10},
+		{Lat: 10, Long: 10},
 	}
 	g := geos.NewGeos()
 	defer g.Finish()
@@ -58,11 +58,11 @@ func TestPolygonNotClosed(t *testing.T) {
 
 func TestPolygonIntersection(t *testing.T) {
 	nodes := []osm.Node{
-		osm.Node{Lat: 0, Long: 0},
-		osm.Node{Lat: 0, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 10, Long: 0},
-		osm.Node{Lat: 0, Long: 0},
+		{Lat: 0, Long: 0},
+		{Lat: 0, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 10, Long: 0},
+		{Lat: 0, Long: 0},
 	}
 	g := geos.NewGeos()
 	defer g.Finish()
@@ -81,7 +81,7 @@ func TestPolygonIntersection(t *testing.T) {
 func BenchmarkLineString(b *testing.B) {
 	size := 16
 	nodes := make([]osm.Node, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		nodes[i] = osm.Node{Lat: 0, Long: float64(i)}
 	}
 	g := geos.NewGeos()
@@ -100,7 +100,7 @@ func BenchmarkLineString(b *testing.B) {
 func BenchmarkLineStringNoGeos(b *testing.B) {
 	size := 16
 	nodes := make([]osm.Node, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		nodes[i] = osm.Node{Lat: 0, Long: float64(i)}
 	}
 
@@ -148,49 +148,49 @@ func TestUnduplicateNodes(t *testing.T) {
 	var nodes []osm.Node
 
 	nodes = []osm.Node{
-		osm.Node{Lat: 0, Long: 0},
+		{Lat: 0, Long: 0},
 	}
 	if res := unduplicateNodes(nodes); len(res) != 1 {
 		t.Fatal(res)
 	}
 	nodes = []osm.Node{
-		osm.Node{Lat: 47.0, Long: 80.0},
-		osm.Node{Lat: 47.0, Long: 80.0},
+		{Lat: 47.0, Long: 80.0},
+		{Lat: 47.0, Long: 80.0},
 	}
 	if res := unduplicateNodes(nodes); len(res) != 1 {
 		t.Fatal(res)
 	}
 
 	nodes = []osm.Node{
-		osm.Node{Lat: 0, Long: -10},
-		osm.Node{Lat: 0, Long: -10},
-		osm.Node{Lat: 0, Long: -10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
+		{Lat: 0, Long: -10},
+		{Lat: 0, Long: -10},
+		{Lat: 0, Long: -10},
+		{Lat: 10, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 10, Long: 10},
 	}
 	if res := unduplicateNodes(nodes); len(res) != 2 {
 		t.Fatal(res)
 	}
 
 	nodes = []osm.Node{
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 0, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 10, Long: 10},
-		osm.Node{Lat: 0, Long: 10},
-		osm.Node{Lat: 0, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 0, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 10, Long: 10},
+		{Lat: 0, Long: 10},
+		{Lat: 0, Long: 10},
 	}
 	if res := unduplicateNodes(nodes); len(res) != 4 {
 		t.Fatal(res)
 	}
 
 	nodes = []osm.Node{
-		osm.Node{Lat: 0, Long: 0},
-		osm.Node{Lat: 0, Long: -10},
-		osm.Node{Lat: 10, Long: -10},
-		osm.Node{Lat: 10, Long: 0},
-		osm.Node{Lat: 0, Long: 0},
+		{Lat: 0, Long: 0},
+		{Lat: 0, Long: -10},
+		{Lat: 10, Long: -10},
+		{Lat: 10, Long: 0},
+		{Lat: 0, Long: 0},
 	}
 	if res := unduplicateNodes(nodes); len(res) != 5 {
 		t.Fatal(res)

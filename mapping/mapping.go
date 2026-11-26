@@ -2,7 +2,9 @@ package mapping
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
+	"slices"
+
 	"regexp"
 
 	"github.com/expr-lang/expr"
@@ -97,7 +99,7 @@ type Mapping struct {
 }
 
 func FromFile(filename string) (*Mapping, error) {
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -436,16 +438,14 @@ func (m *Mapping) addTypedFilters(tableType TableType, filters tableElementFilte
 	}
 }
 
-func (m *Mapping) addRelationFilters(tableType TableType, filters tableElementFilters) {
+func (m *Mapping) addRelationFilters(_ TableType, filters tableElementFilters) {
 	for name, t := range m.Conf.Tables {
 		if t.RelationTypes != nil {
 			relTypes := t.RelationTypes // copy loop var for closure
 			f := func(tags osm.Tags, key Key, elemType string, closed bool) bool {
 				if v, ok := tags["type"]; ok {
-					for _, rtype := range relTypes {
-						if v == rtype {
-							return true
-						}
+					if slices.Contains(relTypes, v) {
+						return true
 					}
 				}
 				return false

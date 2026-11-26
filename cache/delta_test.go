@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"sort"
@@ -71,7 +70,7 @@ func TestReadWriteDeltaCoordsLinearImport(t *testing.T) {
 }
 
 func checkReadWriteDeltaCoords(t *testing.T, withLinearImport bool) {
-	cacheDir, _ := ioutil.TempDir("", "imposm_test")
+	cacheDir, _ := os.MkdirTemp("", "imposm_test")
 	defer os.RemoveAll(cacheDir)
 
 	cache, err := newDeltaCoordsCache(cacheDir)
@@ -86,7 +85,7 @@ func checkReadWriteDeltaCoords(t *testing.T, withLinearImport bool) {
 	// create list with nodes from ID 0->999 in random order
 	nodeIDs := rand.Perm(1000)
 	nodes := make([]osm.Node, 1000)
-	for i := 0; i < len(nodes); i++ {
+	for i := range nodes {
 		nodes[i] = mknode(int64(nodeIDs[i]))
 	}
 
@@ -101,9 +100,9 @@ func checkReadWriteDeltaCoords(t *testing.T, withLinearImport bool) {
 		cache.SetLinearImport(false)
 	}
 
-	for i := 0; i < len(nodes); i++ {
+	for i := range nodes {
 		data, err := cache.GetCoord(int64(i))
-		if err == NotFound {
+		if err == ErrNotFound {
 			t.Fatal("missing coord:", i)
 		} else if err != nil {
 			t.Fatal(err)
@@ -118,7 +117,7 @@ func checkReadWriteDeltaCoords(t *testing.T, withLinearImport bool) {
 
 	// test delete
 	_, err = cache.GetCoord(999999)
-	if err != NotFound {
+	if err != ErrNotFound {
 		t.Error("found missing node")
 	}
 	insertAndCheck(t, cache, 999999, 10, 10)
@@ -151,13 +150,13 @@ func deleteAndCheck(t *testing.T, cache *DeltaCoordsCache, id int64) {
 	}
 
 	result, err := cache.GetCoord(id)
-	if err != NotFound {
+	if err != ErrNotFound {
 		t.Error("found deleted coord", result)
 	}
 }
 
 func TestSingleUpdate(t *testing.T) {
-	cacheDir, _ := ioutil.TempDir("", "imposm_test")
+	cacheDir, _ := os.MkdirTemp("", "imposm_test")
 	defer os.RemoveAll(cacheDir)
 
 	cache, err := newDeltaCoordsCache(cacheDir)
@@ -189,7 +188,7 @@ func TestSingleUpdate(t *testing.T) {
 
 func BenchmarkWriteDeltaCoords(b *testing.B) {
 	b.StopTimer()
-	cacheDir, _ := ioutil.TempDir("", "imposm_test")
+	cacheDir, _ := os.MkdirTemp("", "imposm_test")
 	defer os.RemoveAll(cacheDir)
 
 	cache, err := newDeltaCoordsCache(cacheDir)
@@ -217,7 +216,7 @@ func BenchmarkWriteDeltaCoords(b *testing.B) {
 
 func BenchmarkReadDeltaCoords(b *testing.B) {
 	b.StopTimer()
-	cacheDir, _ := ioutil.TempDir("", "imposm_test")
+	cacheDir, _ := os.MkdirTemp("", "imposm_test")
 	defer os.RemoveAll(cacheDir)
 
 	cache, err := newDeltaCoordsCache(cacheDir)
@@ -240,8 +239,8 @@ func BenchmarkReadDeltaCoords(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		for n := 0; n < 10000; n++ {
-			if _, err := cache.GetCoord(int64(n)); err != nil && err != NotFound {
+		for n := range 10000 {
+			if _, err := cache.GetCoord(int64(n)); err != nil && err != ErrNotFound {
 				b.Fatal(err)
 			}
 		}

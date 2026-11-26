@@ -3,7 +3,7 @@ package test
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
+
 	"os"
 	"testing"
 
@@ -27,7 +27,7 @@ func TestComplete(t *testing.T) {
 	t.Run("Prepare", func(t *testing.T) {
 		var err error
 
-		ts.dir, err = ioutil.TempDir("", "imposm_test")
+		ts.dir, err = os.MkdirTemp("", "imposm_test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,11 @@ func TestComplete(t *testing.T) {
 
 			{"osm_landusages_gen1", 11001, "park", nil},
 			{"osm_landusages_gen1", -13001, "park", nil},
+
+			{"osm_relation_members", -13001, "park", nil},
+			{"osm_relation_members_gen1", -13001, "park", nil},
 		})
+
 	})
 
 	t.Run("ChangedHoleTags1", func(t *testing.T) {
@@ -337,6 +341,20 @@ func TestComplete(t *testing.T) {
 		ts.assertGeomArea(t, checkElem{"osm_buildings", -52121, "yes", nil}, 13653930440.868315)
 	})
 
+	t.Run("InvalidPolygonNotInserted", func(t *testing.T) {
+		// Polygon collapses to an invalid ring before the node update.
+		ts.assertRecords(t, []checkElem{
+			{"osm_landusages", 52211, Missing, nil},
+		})
+	})
+
+	t.Run("InvalidRelationNotInserted", func(t *testing.T) {
+		// Multipolygon member collapses to an invalid ring before the node update.
+		ts.assertRecords(t, []checkElem{
+			{"osm_landusages", -52321, Missing, nil},
+		})
+	})
+
 	t.Run("GeneralizedBananaPolygonIsValid", func(t *testing.T) {
 		// Generalized polygons are valid.
 
@@ -496,7 +514,7 @@ func TestComplete(t *testing.T) {
 
 		c := ts.cache(t)
 		defer c.Close()
-		if _, err := c.Coords.GetCoord(10000); err != cache.NotFound {
+		if _, err := c.Coords.GetCoord(10000); err != cache.ErrNotFound {
 			t.Fatal("coord not missing")
 		}
 
@@ -527,6 +545,9 @@ func TestComplete(t *testing.T) {
 
 			{"osm_landusages_gen1", 11001, Missing, nil},
 			{"osm_landusages_gen1", -13001, Missing, nil},
+
+			{"osm_relation_members", -13001, "water", nil},
+			{"osm_relation_members_gen1", -13001, "water", nil},
 		})
 	})
 
@@ -613,7 +634,7 @@ func TestComplete(t *testing.T) {
 		c := ts.cache(t)
 		defer c.Close()
 		_, err := c.Coords.GetCoord(20002)
-		if err != cache.NotFound {
+		if err != cache.ErrNotFound {
 			t.Error("found deleted node")
 		}
 
@@ -666,7 +687,7 @@ func TestComplete(t *testing.T) {
 		ts.assertCachedWay(t, c, 50111)
 
 		_, err := c.Ways.GetWay(20002)
-		if err != cache.NotFound {
+		if err != cache.ErrNotFound {
 			t.Error("found deleted node")
 		}
 
@@ -692,6 +713,16 @@ func TestComplete(t *testing.T) {
 		// Relations was updated after modified node.
 
 		ts.assertGeomArea(t, checkElem{"osm_buildings", -52121, "yes", nil}, 16276875196.653734)
+	})
+
+	t.Run("InvalidPolygonUpdatedByNode", func(t *testing.T) {
+		// Modified node fixes the ring without an explicit way update.
+		ts.assertGeomValid(t, checkElem{"osm_landusages", 52211, "park", nil})
+	})
+
+	t.Run("InvalidRelationUpdatedByNode", func(t *testing.T) {
+		// Modified node fixes the member ring without an explicit relation update.
+		ts.assertGeomValid(t, checkElem{"osm_landusages", -52321, "forest", nil})
 	})
 
 	t.Run("DuplicateNodeCreate", func(t *testing.T) {

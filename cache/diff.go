@@ -188,7 +188,6 @@ type bunchRefCache struct {
 	buffer       idRefBunches
 	write        chan idRefBunches
 	addc         chan idRef
-	mu           sync.Mutex
 	waitAdd      sync.WaitGroup
 	waitWrite    sync.WaitGroup
 }
@@ -484,8 +483,7 @@ func (index *bunchRefCache) writeRefs(idRefs idRefBunches) error {
 	loadc := make(chan loadBunchItem)
 
 	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for item := range loadc {
 				keyBuf := idToKeyBuf(item.bunchID)
 				putc <- writeBunchItem{
@@ -493,8 +491,7 @@ func (index *bunchRefCache) writeRefs(idRefs idRefBunches) error {
 					index.loadMergeMarshal(keyBuf, item.bunch.idRefs),
 				}
 			}
-			wg.Done()
-		}()
+		})
 	}
 
 	go func() {
@@ -515,9 +512,7 @@ func (index *bunchRefCache) writeRefs(idRefs idRefBunches) error {
 		for k := range idRefs {
 			delete(idRefs, k)
 		}
-		select {
-		case idRefBunchesPool <- idRefs:
-		}
+		idRefBunchesPool <- idRefs
 	}()
 	return index.db.Write(index.wo, batch)
 }

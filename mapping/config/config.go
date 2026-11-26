@@ -21,7 +21,7 @@ type Column struct {
 	Key     Key                          `yaml:"key"`
 	Keys    []Key                        `yaml:"keys"`
 	Type    string                       `yaml:"type"`
-	Args    map[string]interface{}       `yaml:"args"`
+	Args    map[string]any               `yaml:"args"`
 	Aliases map[string]map[string]string `yaml:"aliases"`
 	// GeometryTransform can be used to transform geometry columns before insertion.
 	GeometryTransform string `yaml:"geometry_transform"`
@@ -84,7 +84,7 @@ type OrderedValue struct {
 type KeyValues map[Key][]OrderedValue
 type KeyRegexpValue map[Key]string
 
-func (kv *KeyValues) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (kv *KeyValues) UnmarshalYAML(unmarshal func(any) error) error {
 	if *kv == nil {
 		*kv = make(map[Key][]OrderedValue)
 	}
@@ -99,7 +99,7 @@ func (kv *KeyValues) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		if !ok {
 			return fmt.Errorf("mapping key '%s' not a string", k)
 		}
-		values, ok := item.Value.([]interface{})
+		values, ok := item.Value.([]any)
 		if !ok {
 			return fmt.Errorf("mapping key '%s' not a string", k)
 		}
