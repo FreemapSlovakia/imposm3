@@ -121,6 +121,20 @@ This is a fork of https://github.com/omniscale/imposm3 with various improvements
         sport: [tennis]
   ```
 
+- **`key=value` entries in `areas.area_tags` and `areas.linear_tags`**
+  An entry may name a single value; it overrides the entry for its bare key.
+  Applies to the key that matched the table's mapping, compared with that key's whole tag value,
+  so a `;`-separated value under `multi_values` matches no `key=value` entry.
+
+  Example: closed `highway=rest_area` ways are areas, other closed highways stay linear;
+  closed `leisure=track` ways are linear, other closed leisure ways stay areas.
+
+  ```yaml
+  areas:
+    area_tags: [building, landuse, leisure, highway=rest_area]
+    linear_tags: [highway, barrier, leisure=track]
+  ```
+
 - **`tags.include_regex` (global tag-key include by regex)**
   Keep extra tags based on regular expressions, without enabling `tags.load_all`.
   Useful for namespaces like `addr:*` or `contact:*`.

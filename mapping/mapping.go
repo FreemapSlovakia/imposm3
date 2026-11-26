@@ -369,51 +369,65 @@ type elementFilter func(tags osm.Tags, key Key, elemType string, closed bool) bo
 
 type tableElementFilters map[string][]elementFilter
 
+type areaKind int
+
+const (
+	areaKindNone areaKind = iota
+	areaKindArea
+	areaKindLinear
+)
+
+// areaKinds maps the `key` and `key=value` entries of `area_tags` and `linear_tags`;
+// a `key=value` entry overrides the bare key.
+type areaKinds map[string]areaKind
+
+func (a areaKinds) add(entries []config.Key, kind areaKind) {
+	for _, entry := range entries {
+		a[string(entry)] = kind
+	}
+}
+
+func (a areaKinds) of(tags osm.Tags, key Key) areaKind {
+	// with multi_values, a `;`-separated value matches no `key=value` entry
+	if kind, ok := a[string(key)+"="+tags[string(key)]]; ok {
+		return kind
+	}
+	return a[string(key)]
+}
+
 func (m *Mapping) addTypedFilters(tableType TableType, filters tableElementFilters) {
-	var areaTags map[Key]struct{}
-	var linearTags map[Key]struct{}
-	if m.Conf.Areas.AreaTags != nil {
-		areaTags = make(map[Key]struct{})
-		for _, tag := range m.Conf.Areas.AreaTags {
-			areaTags[Key(tag)] = struct{}{}
-		}
-	}
-	if m.Conf.Areas.LinearTags != nil {
-		linearTags = make(map[Key]struct{})
-		for _, tag := range m.Conf.Areas.LinearTags {
-			linearTags[Key(tag)] = struct{}{}
-		}
-	}
+	kinds := areaKinds{}
+	kinds.add(m.Conf.Areas.AreaTags, areaKindArea)
+	kinds.add(m.Conf.Areas.LinearTags, areaKindLinear)
+
+	hasAreaTags := m.Conf.Areas.AreaTags != nil
+	hasLinearTags := m.Conf.Areas.LinearTags != nil
 
 	for name, t := range m.Conf.Tables {
 		if !tableMatchesType(t, tableType) {
 			continue
 		}
-		if TableType(t.Type) == LineStringTable && areaTags != nil {
+		if TableType(t.Type) == LineStringTable && hasAreaTags {
 			f := func(tags osm.Tags, key Key, elemType string, closed bool) bool {
 				if closed {
 					if tags["area"] == "yes" {
 						return false
 					}
-					if tags["area"] != "no" {
-						if _, ok := areaTags[key]; ok {
-							return false
-						}
+					if tags["area"] != "no" && kinds.of(tags, key) == areaKindArea {
+						return false
 					}
 				}
 				return true
 			}
 			filters[name] = append(filters[name], f)
 		}
-		if (TableType(t.Type) == PolygonTable || (TableType(t.Type) == PointOrPolygonTable && tableType == PolygonTable)) && linearTags != nil {
+		if (TableType(t.Type) == PolygonTable || (TableType(t.Type) == PointOrPolygonTable && tableType == PolygonTable)) && hasLinearTags {
 			f := func(tags osm.Tags, key Key, elemType string, closed bool) bool {
 				if closed && tags["area"] == "no" {
 					return false
 				}
-				if tags["area"] != "yes" {
-					if _, ok := linearTags[key]; ok {
-						return false
-					}
+				if tags["area"] != "yes" && kinds.of(tags, key) == areaKindLinear {
+					return false
 				}
 				return true
 			}

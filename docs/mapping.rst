@@ -523,3 +523,5 @@ You can configure these default interpretations with the ``areas`` option.
 
 
 With this ``areas`` configuration, ``highway`` elements are only inserted into polygon tables if there is an ``area=yes`` tag. ``aeroway`` elements are only inserted into linestring tables if there is an ``area=no`` tag.
+
+An entry can also be ``key=value``, which overrides the entry for its bare key. With ``area_tags: [highway=rest_area]`` and ``linear_tags: [highway]``, closed ``highway=rest_area`` ways are areas while other closed highways stay linear.

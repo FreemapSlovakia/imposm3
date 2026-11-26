@@ -484,9 +484,13 @@ func TestPointMatcherRejectFiltersSplitValuesEnabled(t *testing.T) {
 func TestLineStringMatcher(t *testing.T) {
 	mapping, err := New([]byte(`
     areas:
-      area_tags: [buildings, landuse, leisure, natural, aeroway]
-      linear_tags: [highway, barrier]
+      area_tags: [buildings, landuse, leisure, natural, aeroway, highway=rest_area]
+      linear_tags: [highway, barrier, leisure=track]
     tables:
+      leisureways:
+        type: linestring
+        mapping:
+          leisure: [track, park]
       landuse:
         type: polygon
         mapping:
@@ -509,6 +513,7 @@ func TestLineStringMatcher(t *testing.T) {
                 - pedestrian
                 - footway
                 - secondary
+                - rest_area
           railway:
             mapping:
               railway:
@@ -545,6 +550,15 @@ func TestLineStringMatcher(t *testing.T) {
 		{osm.Tags{"aeroway": "runway", "area": "no"},
 			[]Match{{"aeroway", "runway", DestTable{Name: "aeroways"}, nil}}},
 
+		// key=value overrides its key
+		{osm.Tags{"highway": "rest_area"}, []Match{}},
+		{osm.Tags{"highway": "rest_area", "area": "no"},
+			[]Match{{"highway", "rest_area", DestTable{Name: "roads", SubMapping: "roads"}, nil}}},
+		{osm.Tags{"leisure": "track"},
+			[]Match{{"leisure", "track", DestTable{Name: "leisureways"}, nil}}},
+		{osm.Tags{"leisure": "track", "area": "yes"}, []Match{}},
+		{osm.Tags{"leisure": "park"}, []Match{}},
+
 		{osm.Tags{"highway": "secondary", "railway": "tram"},
 			[]Match{
 				{"highway", "secondary", DestTable{Name: "roads", SubMapping: "roads"}, nil},
@@ -577,17 +591,17 @@ func TestLineStringMatcher(t *testing.T) {
 func TestPolygonMatcher_MatchWay(t *testing.T) {
 	mapping, err := New([]byte(`
     areas:
-      area_tags: [buildings, landuse, leisure, natural, aeroway]
-      linear_tags: [highway, barrier]
+      area_tags: [buildings, landuse, leisure, natural, aeroway, highway=rest_area]
+      linear_tags: [highway, barrier, leisure=track]
     tables:
       landusages:
         type: polygon
         mapping:
             amenity: [university]
             landuse: [farm, forest]
-            leisure: [park]
+            leisure: [park, track]
             landuse: [park]
-            highway: [footway]
+            highway: [footway, rest_area]
             barrier: [hedge]
       transport_areas:
         type: polygon
@@ -649,6 +663,16 @@ func TestPolygonMatcher_MatchWay(t *testing.T) {
 		{osm.Tags{"highway": "footway"}, []Match{}},
 		{osm.Tags{"highway": "footway", "area": "yes"}, []Match{
 			{"highway", "footway", DestTable{Name: "landusages"}, nil},
+		}},
+
+		// key=value overrides its key
+		{osm.Tags{"highway": "rest_area"}, []Match{
+			{"highway", "rest_area", DestTable{Name: "landusages"}, nil},
+		}},
+		{osm.Tags{"highway": "rest_area", "area": "no"}, []Match{}},
+		{osm.Tags{"leisure": "track"}, []Match{}},
+		{osm.Tags{"leisure": "track", "area": "yes"}, []Match{
+			{"leisure", "track", DestTable{Name: "landusages"}, nil},
 		}},
 
 		{osm.Tags{"boundary": "administrative", "admin_level": "8"}, []Match{{"boundary", "administrative", DestTable{Name: "admin"}, nil}}},
