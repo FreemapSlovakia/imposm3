@@ -1,6 +1,6 @@
 # Imposm with improvements
 
-This is a fork of https://github.com/omniscale/imposm3 with various improvements, implemented with significant help from Codex.
+This is a fork of https://github.com/omniscale/imposm3 with various improvements, implemented with significant help from Codex and Claude.
 
 ## Mapping extensions in this fork
 
